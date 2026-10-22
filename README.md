@@ -1,5 +1,7 @@
 # G1 Poser Halloween — flat-ground crawl preview
 
+![G1 crawling in the Halloween cemetery](halloween.png)
+
 A modified 23-actuator G1 crawling in a grassy Halloween cemetery, with pumpkins,
 ghosts and three witches flying on broomsticks. The crawl controller runs live
 MuJoCo physics; the scene decorations are non-colliding and do not change the
