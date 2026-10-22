@@ -1,7 +1,7 @@
 [project]
 name = "g1-poser"
 version = "0.1.0"
-description = "Add your description here"
+description = "MuJoCo G1 poser and verified flat-ground crawl preview with a Halloween cemetery scene"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -9,8 +9,11 @@ dependencies = [
     "matplotlib>=3.10.6",
     "mink>=0.0.12",
     "mujoco>=3.3.5",
-    "unitree-sdk2py",
 ]
 
-[tool.uv.sources]
-unitree-sdk2py = { path = "../unitree_sdk2_python", editable = true }
+[project.optional-dependencies]
+crawl = [
+    "mujoco==3.8.0",
+    "numpy==2.4.4",
+    "torch==2.7.0",
+]

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+import argparse
 import math
 import json
 import shutil
 import subprocess
+import sys
 import time
 
 import mujoco
@@ -15,7 +17,9 @@ import mink
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
+from tkinter import filedialog
 from datetime import datetime
+from platform_viewer import launch_viewer
 
 
 _HERE = Path(__file__).parent
@@ -92,6 +96,27 @@ def _zenity_prompt_float(title: str, text: str, initial: float) -> float | None:
 
     Returns None if cancelled/unavailable/invalid. This avoids Tk Entry widgets.
     """
+    if sys.platform == "darwin":
+        script = '''on run arguments
+            set answer to display dialog (item 2 of arguments) with title (item 1 of arguments) default answer (item 3 of arguments)
+            return text returned of answer
+        end run'''
+        result = subprocess.run(
+            ["osascript", "-e", script, title, text, str(initial)],
+            capture_output=True, text=True,
+        )
+        if result.returncode:
+            if "(-128)" not in result.stderr:
+                messagebox.showerror(title, result.stderr.strip())
+            return None
+        try:
+            value = float(result.stdout.strip())
+            if not math.isfinite(value):
+                raise ValueError
+            return value
+        except ValueError:
+            messagebox.showerror(title, "Please enter a finite number.")
+            return None
     try:
         zenity = shutil.which("zenity")
         if not zenity:
@@ -130,6 +155,13 @@ def _clamp(v: float, lo: float, hi: float) -> float:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="G1 gait editor with IK or physics playback.")
+    parser.add_argument(
+        "--physics", action="store_true",
+        help="Start with Physics (bake + play) enabled instead of IK mode.",
+    )
+    args = parser.parse_args()
+
     # Load scene and build initial state
     model = mujoco.MjModel.from_xml_path(_XML.as_posix())
     data = mujoco.MjData(model)
@@ -446,7 +478,7 @@ if __name__ == "__main__":
             self.plant_y = tk.DoubleVar(value=float(iy))
             self.lift_x = tk.DoubleVar(value=float(ix + default_step_forward))
             self.lift_y = tk.DoubleVar(value=float(iy))
-            self.lift_h = tk.DoubleVar(value=0.08)
+            self.lift_h = tk.DoubleVar(value=self._init_lift_h)
 
             pad = DualXYPad(
                 self,
@@ -571,7 +603,7 @@ if __name__ == "__main__":
             row += 1
             ttk.Checkbutton(self, text="Rear symmetry (RL ↔ RR)", variable=self.rear_sym).grid(row=row, column=0, sticky="w")
             row += 1
-            self.physics = tk.BooleanVar(value=False)
+            self.physics = tk.BooleanVar(value=args.physics)
             ttk.Checkbutton(self, text="Physics (bake + play)", variable=self.physics).grid(row=row, column=0, sticky="w")
 
             def _update_labels(*_a):
@@ -767,7 +799,7 @@ if __name__ == "__main__":
 
     # Viewer + IK loop
     solver = "daqp"
-    with mujoco.viewer.launch_passive(model=model, data=data, show_left_ui=True, show_right_ui=True) as viewer:
+    with launch_viewer(model, data, _XML) as viewer:
         mujoco.mjv_defaultFreeCamera(model, viewer.cam)
         # Camera follow: track the pelvis body
         try:
@@ -1289,6 +1321,12 @@ if __name__ == "__main__":
 
         # --- JSON import/export helpers (no Entry widgets; prefer Zenity) ---
         def _safe_open_json_path(parent, initialdir: Path) -> Path | None:
+            if sys.platform == "darwin":
+                selected = filedialog.askopenfilename(
+                    parent=parent, title="Import Configuration",
+                    initialdir=str(initialdir), filetypes=[("JSON files", "*.json"), ("All files", "*")],
+                )
+                return Path(selected) if selected else None
             try:
                 zenity = shutil.which("zenity")
                 if zenity:
@@ -1786,8 +1824,10 @@ if __name__ == "__main__":
             try:
                 root.update_idletasks()
                 root.update()
-            except Exception:
-                pass
+                if not root.winfo_exists():
+                    break
+            except tk.TclError:
+                break
 
             # Handle Physics toggle: bake once and drive actuators from baked frames
             physics_now = hasattr(global_ctrl, "physics") and bool(global_ctrl.physics.get())
