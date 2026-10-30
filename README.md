@@ -7,6 +7,22 @@ ghosts and three witches flying on broomsticks. The crawl controller runs live
 MuJoCo physics; the scene decorations are non-colliding and do not change the
 verified robot trajectory. The original MINK IK poser remains available separately.
 
+## Standing-to-crawl nominal preview (2026-10-30)
+
+This branch now includes a continuous 4.16-second standing → two-hand contact →
+crawl example, with a frozen configuration, independent physics replay audit and
+Halloween playback. It is **simulation research only, not hardware-ready**:
+all eight tested initial-velocity perturbations failed the physical acceptance
+gates. The transition is a searched trajectory with a guarded handoff, not a
+newly trained RL policy. The final two seconds use the frozen crawl policy.
+
+For the tested transition environment and commands, see
+[the transition v1 guide](docs/RL_COORDINATED_TRANSITION_V1.md#使用).
+The successful report/trajectory and selected search/evaluation reports are
+versioned; large model/policy assets still use the checksum-pinned installer below.
+Other research scripts and notes preserve historical experiments; their generated
+outputs are not bundled and their presence does not imply a successful result.
+
 ## Crawl quick start (Apple Silicon macOS)
 
 Install `uv`, clone this release/tag, then run from the repository root:

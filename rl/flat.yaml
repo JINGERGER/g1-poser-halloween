@@ -1,0 +1,58 @@
+algo:
+  num_envs: 32
+  num_steps_per_env: 32
+  max_iterations: 100
+  save_interval: 50
+  seed: 1
+  empirical_normalization: false
+  obs_groups:
+    actor: [policy]
+    critic: [policy]
+  policy:
+    init_noise_std: 0.3
+    actor_hidden_dims: [128, 128]
+    critic_hidden_dims: [128, 128]
+  algorithm:
+    learning_rate: 0.0003
+    num_learning_epochs: 4
+    num_mini_batches: 4
+    entropy_coef: 0.005
+    disable_finite_checks: false
+    finite_check_interval: 1
+training:
+  task_name: G1CrawlFlat23
+  sim_backend: mujoco
+  no_play: true
+  play_env_num: 1
+  logger: tensorboard
+  log_interval: 10
+env:
+  speed_min: 0.0
+  speed_max: 0.0
+  reset_joint_noise: 0.01
+  control_config:
+    action_scale: 0.25
+reward:
+  scales:
+    alive: 0.2
+    velocity: 2.0
+    orientation: 1.5
+    height: 1.0
+    support: 1.5
+    clearance: 0.5
+    slip: -0.3
+    action_rate: -0.05
+    joint_velocity: -0.002
+    pose: -0.2
+    angular_velocity: -0.05
+    torso_contact: -5.0
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+  job:
+    chdir: false
+  job_logging:
+    handlers:
+      file:
+        filename: output/rl/hydra.log

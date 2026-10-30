@@ -1,0 +1,33 @@
+algo:
+  num_envs: 4
+  num_steps_per_env: 24
+  max_iterations: 4
+  save_interval: 4
+  empirical_normalization: false
+  obs_groups:
+    default: [obs]
+  policy:
+    init_noise_std: 0.15
+    actor_hidden_dims: [64, 64]
+    critic_hidden_dims: [64, 64]
+    activation: tanh
+  algorithm:
+    learning_rate: 0.0003
+    num_learning_epochs: 2
+    num_mini_batches: 2
+    gamma: 0.995
+    lam: 0.95
+    clip_param: 0.2
+    entropy_coef: 0.001
+    disable_finite_checks: false
+    finite_check_interval: 1
+    metrics_interval: 1
+    adaptive_lr_update_interval: 1
+training:
+  task_name: G1ComponentShortStepV1
+  sim_backend: mujoco
+  no_play: true
+  logger: tensorboard
+  log_interval: 1
+env:
+  reference_gain: 1.0

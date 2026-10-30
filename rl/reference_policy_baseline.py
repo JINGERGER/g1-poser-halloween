@@ -13,6 +13,7 @@ import torch
 
 from fetch_reference_crawl_policy import COMMIT, EXPECTED, SIZE
 from artifact_utils import digest
+from crawl_control import CrawlController
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -74,7 +75,7 @@ def materialize():
 def run(folder, constants, policy, control_substeps, command, output,
         model_path=None, gain_profile="reference", initial_qpos=None,
         contact_time_constant=None, physics_timestep=None, ankle_min_target=None,
-        foot_clearance_boost=0., step_callback=None):
+        foot_clearance_boost=0., step_callback=None, initial_qvel=None):
     model_path = Path(model_path or folder / "scene.xml")
     model = mujoco.MjModel.from_xml_path(str(model_path))
     assert model.opt.timestep == .002
@@ -106,12 +107,16 @@ def run(folder, constants, policy, control_substeps, command, output,
     assert roll == yaw == 0
     data.qpos[3:7] = [np.cos(pitch / 2), 0., np.sin(pitch / 2), 0.]
     order = constants["PYTORCH_JOINT_ORDER"]
-    defaults = constants["TRAINING_DEFAULT_ANGLES"]
     joint_ids = {model.joint(index).name: index for index in range(1, model.njnt)}
     for name, joint in joint_ids.items():
         data.qpos[model.jnt_qposadr[joint]] = pose["joints"][name]
     if initial_qpos is not None:
         data.qpos[:] = initial_qpos
+    if initial_qvel is not None:
+        initial_qvel = np.asarray(initial_qvel, dtype=float)
+        if initial_qvel.shape != (model.nv,) or not np.isfinite(initial_qvel).all():
+            raise ValueError("initial_qvel must be a finite model.nv vector")
+        data.qvel[:] = initial_qvel
     mujoco.mj_forward(model, data)
     initial_violations = [
         name for name, joint in joint_ids.items()
@@ -131,7 +136,7 @@ def run(folder, constants, policy, control_substeps, command, output,
             support_groups[2 if body.startswith("left") else 3].append(geom)
     assert all(support_groups)
     group_of = {geom: index for index, group in enumerate(support_groups) for geom in group}
-    previous = np.zeros(23, dtype=np.float32)
+    controller = CrawlController(model, constants, policy, command, ankle_min_target, foot_clearance_boost)
     rows, actions, controls = [], [], []
     positions, velocities = [data.qpos.copy()], [data.qvel.copy()]
     initial = data.qpos[:3].copy()
@@ -139,46 +144,7 @@ def run(folder, constants, policy, control_substeps, command, output,
     period = control_substeps * model.opt.timestep
     missing = [name for name in order if name not in joint_ids]
     for unused in range(round(10 / period)):
-        rotation = np.zeros(9)
-        mujoco.mju_quat2Mat(rotation, data.qpos[3:7])
-        gravity = rotation.reshape(3, 3).T @ [0., 0., -1.]
-        relative, speeds = np.zeros(23, dtype=np.float32), np.zeros(23, dtype=np.float32)
-        for index, name in enumerate(order):
-            if name in joint_ids:
-                joint = joint_ids[name]
-                relative[index] = np.float32(data.qpos[model.jnt_qposadr[joint]]) - np.float32(defaults[name])
-                speeds[index] = data.qvel[model.jnt_dofadr[joint]]
-        observation = np.r_[gravity, [command, 0., 0.], relative, speeds, previous].astype(np.float32)
-        assert observation.shape == (75,) and np.isfinite(observation).all()
-        with torch.inference_mode():
-            action = policy(torch.from_numpy(observation)).numpy().copy()
-        assert action.shape == (23,) and np.isfinite(action).all()
-        previous = action
-        correction = {}
-        if foot_clearance_boost:
-            for side, opposite_hand in (("left", support_groups[1][0]), ("right", support_groups[0][0])):
-                gap = float(mujoco.mj_geomDistance(model, data, opposite_hand, floor, 2., None))
-                phase = np.clip((gap - .002) / .015, 0., 1.)
-                phase = phase * phase * (3 - 2 * phase)
-                leg_names = [f"{side}_{suffix}_joint" for suffix in ("hip_pitch", "hip_roll", "hip_yaw", "knee")]
-                columns = [model.jnt_dofadr[joint_ids[name]] for name in leg_names]
-                jacobian = np.zeros((3, model.nv))
-                mujoco.mj_jacGeom(model, data, jacobian, None, support_groups[2 if side == "left" else 3][0])
-                leg_jacobian = jacobian[:, columns]
-                delta = leg_jacobian.T @ np.linalg.solve(
-                    leg_jacobian @ leg_jacobian.T + .001 ** 2 * np.eye(3),
-                    np.array([0., 0., foot_clearance_boost * phase]))
-                correction.update(zip(leg_names, np.clip(delta, -.2, .2)))
-        for actuator, joint in enumerate(model.actuator_trnid[:, 0]):
-            name = model.joint(int(joint)).name
-            target = np.float32(defaults[name]) + np.float32(.5) * action[order.index(name)]
-            target += correction.get(name, 0.)
-            limits = constants["JOINT_LIMITS"].get(name, model.jnt_range[joint])
-            data.ctrl[actuator] = np.clip(target, *limits)
-            if ankle_min_target is not None and name in ("left_ankle_pitch_joint", "right_ankle_pitch_joint"):
-                data.ctrl[actuator] = max(data.ctrl[actuator], ankle_min_target)
-            if model.actuator_ctrllimited[actuator]:
-                data.ctrl[actuator] = np.clip(data.ctrl[actuator], *model.actuator_ctrlrange[actuator])
+        action = controller.update(data)
         actions.append(action.copy())
         controls.append(data.ctrl.copy())
         for unused_substep in range(control_substeps):
@@ -217,7 +183,8 @@ def run(folder, constants, policy, control_substeps, command, output,
         if failure:
             break
     np.savez_compressed(output, qpos=positions, qvel=velocities, actions=actions, ctrl=controls)
-    return {"control_substeps": control_substeps, "control_dt_s": period, "command_local_z_mps": command,
+    return {"controller_sha256": digest(ROOT / "rl/crawl_control.py"),
+            "control_substeps": control_substeps, "control_dt_s": period, "command_local_z_mps": command,
             "model_path": str(model_path.resolve()), "model_sha256": digest(model_path), "gain_profile": gain_profile,
             "contact_time_constant": contact_time_constant, "physics_timestep": float(model.opt.timestep),
             "ankle_min_target": ankle_min_target,

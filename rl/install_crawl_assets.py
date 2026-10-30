@@ -36,6 +36,12 @@ def install(archive, root=ROOT):
             if hashlib.sha256(contents).hexdigest() != expected:
                 raise ValueError(f"Corrupt asset: {name}")
             if target.exists() and target.read_bytes() != contents:
+                if name == "output/rl/short_step_assets/e5924df6cfa804e6/bundle.json":
+                    packaged = json.loads(contents)
+                    existing = target.read_bytes()
+                    if (hashlib.sha256(existing).hexdigest() == packaged.get("source_bundle_sha256")
+                            and json.loads(existing).get("initial_qpos") == packaged["initial_qpos"]):
+                        continue
                 raise FileExistsError(f"Refusing to overwrite different local asset: {name}. Use a clean checkout.")
             verified.append((target, contents))
         for target, contents in verified:

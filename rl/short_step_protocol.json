@@ -1,0 +1,29 @@
+{
+  "version": "component-left-hand-step-v1",
+  "duration_s": 4.0,
+  "control_dt_s": 0.02,
+  "step_length_m": 0.03,
+  "reference_clearance_m": 0.02,
+  "residual_scale_rad": 0.25,
+  "max_ctrl_delta_rad": 0.01,
+  "unload_max_n": 1.0,
+  "air_gap_m": 0.01,
+  "air_dwell_s": 0.08,
+  "advance_min_m": 0.02,
+  "landing_xy_tolerance_m": 0.015,
+  "landing_gap_max_m": 0.002,
+  "reload_min_n": 5.0,
+  "reload_dwell_s": 0.3,
+  "settled_velocity_max": 0.05,
+  "settled_slip_max_mps": 0.02,
+  "reward": {
+    "alive": 0.2,
+    "reference": 0.6,
+    "unload": 0.4,
+    "action_rate": -0.02,
+    "slip": -0.1,
+    "event": 1.0,
+    "success": 10.0,
+    "failure": -10.0
+  }
+}

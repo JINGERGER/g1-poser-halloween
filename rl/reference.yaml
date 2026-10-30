@@ -1,0 +1,64 @@
+algo:
+  num_envs: 32
+  num_steps_per_env: 24
+  max_iterations: 10
+  save_interval: 10
+  seed: 1
+  empirical_normalization: false
+  obs_groups:
+    actor: [obs]
+    critic: [critic]
+  policy:
+    init_noise_std: 1.0
+    actor_hidden_dims: [256, 128, 128]
+    critic_hidden_dims: [256, 128, 128]
+    activation: elu
+  algorithm:
+    clip_param: 0.05
+    entropy_coef: 0.008
+    learning_rate: 0.001
+    num_learning_epochs: 5
+    num_mini_batches: 4
+    gamma: 0.99
+    lam: 0.95
+    desired_kl: 0.01
+    max_grad_norm: 1.0
+    disable_finite_checks: false
+    finite_check_interval: 1
+    metrics_interval: 1
+    adaptive_lr_update_interval: 1
+    adaptive_kl_beta: 0.0
+    adaptive_lr_growth: 1.5
+    adaptive_lr_decay: 1.5
+training:
+  task_name: G1CrawlReference23
+  sim_backend: mujoco
+  no_play: true
+  logger: tensorboard
+  log_interval: 1
+env:
+  seed: ${algo.seed}
+  reference_motion: false
+  speed_min: -1.0
+  speed_max: 2.5
+  actor_noise: true
+  reset_noise: true
+  control_config:
+    action_scale: 0.5
+reward:
+  scales:
+    track_linear: 2.0
+    track_turn: 2.0
+    gravity: 0.2
+    height: -0.1
+    joint_deviation: -0.01
+    joint_limits: -5.0
+    torque_limits: -5.0
+    action_rate: -0.01
+    torques: -0.0001
+    bad_contact: -5.0
+    slide: -0.2
+    feet_air: -0.5
+    hands_air: -0.5
+    left_air: -0.1
+    right_air: -0.1
